@@ -41,6 +41,8 @@ class GroovySlf4jTest implements RewriteTest {
 
     @Test
     void slf4jWithCConcatenation() {
+        System.setProperty( "groovy.disabled.global.ast.transformations", "org.codehaus.groovy.transform.LogASTTransformation");
+
         rewriteRun(
           groovy(
             """
@@ -119,22 +121,21 @@ class GroovySlf4jTest implements RewriteTest {
         rewriteRun(
           groovy(
             """
-package com.example.demo
-
-import spock.lang.Specification
-
-class TrueTest extends Specification {
-
-    def 'true test'() {
-        when: 
-        def a = true
-
-        then: 
-        a 
-    }
-
-}
-
+                    package com.example.demo
+                    
+                    import spock.lang.Specification
+                    
+                    class TrueTest extends Specification {
+                    
+                        def 'true test'() {
+                            when: 
+                            def a = true
+                    
+                            then: 
+                            a 
+                        }
+                    
+                    }
               """
           )
         );
