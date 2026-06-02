@@ -95,7 +95,9 @@ public class GroovyParser implements Parser {
 
     @Override
     public Stream<SourceFile> parseInputs(Iterable<Input> sources, @Nullable Path relativeTo, ExecutionContext ctx) {
-        CompilerConfiguration configuration = new CompilerConfiguration();
+        // Use the Properties constructor so that groovy.* system properties (including
+        // groovy.disabled.global.ast.transformations) are picked up via configure().
+        CompilerConfiguration configuration = new CompilerConfiguration(System.getProperties());
         configuration.setTolerance(Integer.MAX_VALUE);
         configuration.setWarningLevel(WarningMessage.NONE);
         configuration.setClasspathList(classpath == null ? emptyList() : classpath.stream()
