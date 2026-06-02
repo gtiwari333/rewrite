@@ -95,7 +95,9 @@ public class GroovyParser implements Parser {
 
     @Override
     public Stream<SourceFile> parseInputs(Iterable<Input> sources, @Nullable Path relativeTo, ExecutionContext ctx) {
-        CompilerConfiguration configuration = new CompilerConfiguration();
+        // Use the Properties constructor so that groovy.* system properties (including
+        // groovy.disabled.global.ast.transformations) are picked up via configure().
+        CompilerConfiguration configuration = new CompilerConfiguration(System.getProperties());
         configuration.setTolerance(Integer.MAX_VALUE);
         configuration.setWarningLevel(WarningMessage.NONE);
         configuration.setClasspathList(classpath == null ? emptyList() : classpath.stream()
@@ -111,6 +113,17 @@ public class GroovyParser implements Parser {
         for (Consumer<CompilerConfiguration> compilerCustomizer : compilerCustomizers) {
             compilerCustomizer.accept(configuration);
         }
+//        // Spock's AST transformation (SpockTransform) rewrites spec methods into a form that
+//        // doesn't map back to source code, making it impossible to parse correctly. Always
+//        // disable it so Groovy parses the source as-written rather than the execution-time form.
+//        // Applied after compilerCustomizers so any user-supplied disabled-transform set is
+//        // merged rather than replaced.
+//        Set<String> disabledTransformations = new LinkedHashSet<>();
+//        if (configuration.getDisabledGlobalASTTransformations() != null) {
+//            disabledTransformations.addAll(configuration.getDisabledGlobalASTTransformations());
+//        }
+//        disabledTransformations.add("org.spockframework.compiler.SpockTransform");
+//        configuration.setDisabledGlobalASTTransformations(disabledTransformations);
 
         ParsingExecutionContextView pctx = ParsingExecutionContextView.view(ctx);
         return StreamSupport.stream(sources.spliterator(), false)
