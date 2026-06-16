@@ -414,4 +414,87 @@ class GroovyParserTest implements RewriteTest {
         );
     }
 
+
+    @Test
+    void newTest() {
+        rewriteRun(
+          groovy(
+            """
+
+    static Object serializeAndDeserialize(Object original) {
+        try (ByteArrayOutputStream bos = new ByteArrayOutputStream()
+             ObjectOutputStream oos = new ObjectOutputStream(bos)) {
+            oos.writeObject(original);
+            byte[] bytes = bos.toByteArray();
+
+            try (ByteArrayInputStream bis = new ByteArrayInputStream(bytes)
+                 ObjectInputStream ois = new ObjectInputStream(bis)) {
+                return ois.readObject()
+            }
+        }
+    }
+              """
+          )
+        );
+    }
+
+
+
+    @Test
+    void newTest2() {
+        rewriteRun(
+          groovy(
+            """
+                    def filePath = "/tmp/example.txt"
+                    new File(filePath).text = "Hello, Groovy!"
+              """
+          )
+        );
+    }
+    
+    
+    
+        @Test
+    void newTest23() {
+        rewriteRun(
+          groovy(
+            """
+
+    static byte[] decompress(byte[] compressedTxt) throws IOException {
+        ByteArrayOutputStream os = new ByteArrayOutputStream()
+        try (OutputStream ios = new InflaterOutputStream(os)) {
+            ios.write(compressedTxt)
+        }
+        return os.toByteArray()
+    }
+
+              """
+          )
+        );
+    }
+
+        @Test
+    void newTest233() {
+        rewriteRun(
+          groovy(
+            """
+
+    void dox(@RequestBody String a) {
+        lockModule.doItWithLock(a, () -> {
+            try {
+                // do something
+            } catch (Exception e) {
+                throw e
+            }
+        },  
+                10, 15)
+
+        ResponseEntity.ok().build()
+    }
+
+              """
+          )
+        );
+    }
+
 }

@@ -1746,12 +1746,36 @@ public class GroovyParserVisitor {
             Space fmt = EMPTY;
             Space staticInitPadding = EMPTY;
             boolean isStaticInit = sourceStartsWith("static");
+            // Groovy 4 desugars try-with-resources (including single-resource and newline-separated) into a
+            // flat BlockStatement: { [resourceDecl, sentinel, TryCatch_rest] }. This block has no '{' in
+            // source; source starts with "try". Detect BEFORE getParentOrThrow() to handle top-level scripts
+            // where nodeCursor has no parent.
+
+
+            // | new
+            if (!isStaticInit) {
+                List<org.codehaus.groovy.ast.stmt.Statement> bs = block.getStatements();
+                int nextNonWs = indexOfNextNonWhitespace(cursor, source);
+                if (bs.size() >= 2
+                        && bs.get(bs.size() - 1) instanceof TryCatchStatement
+                        && !(bs.get(0) instanceof BlockStatement)
+                        && nextNonWs < source.length()
+                        && source.startsWith("try", nextNonWs)
+                        && (nextNonWs + 3 >= source.length() || !Character.isLetterOrDigit(source.charAt(nextNonWs + 3)))) {
+                    visitTryCatchFinallyFromFlatDesugaredBlock(block);
+                    return;
+                }
+            }
+
+            // new
             Object parent = nodeCursor.getParentOrThrow().getValue();
             boolean withinClosure = !(parent instanceof LambdaExpression) && parent instanceof ClosureExpression ||
                     (parent instanceof ExpressionStatement &&
                             !(((ExpressionStatement) parent).getExpression() instanceof LambdaExpression) &&
                             ((ExpressionStatement) parent).getExpression() instanceof ClosureExpression
                     );
+            /// new
+
             if (isStaticInit) {
                 fmt = sourceBefore("static");
                 staticInitPadding = whitespace();
@@ -3244,6 +3268,96 @@ public class GroovyParserVisitor {
 
             //noinspection ConstantConditions
             queue.add(new J.Try(randomId(), prefix, Markers.EMPTY, resources, body, catches, finally_));
+        }
+
+        // Handles the flat BlockStatement Groovy 4 desugars for newline-separated try-with-resources:
+        //   flatBlock = { [resource_1_decl, sentinel, TryCatch_rest] }
+        // stmts[0] is NOT a BlockStatement (unlike isDesugaredResourceBlock which wraps twice).
+        // Additional resources are in TryCatch_rest.tryStmt via the double-wrapped structure.
+        private void visitTryCatchFinallyFromFlatDesugaredBlock(BlockStatement flatBlock) {
+            List<org.codehaus.groovy.ast.stmt.Statement> stmts = flatBlock.getStatements();
+            TryCatchStatement nextTryCatch = (TryCatchStatement) stmts.get(stmts.size() - 1);
+
+            Space prefix = sourceBefore("try");
+            Space beforeParen = sourceBefore("(");
+            List<JRightPadded<J.Try.Resource>> resourceList = new ArrayList<>();
+
+            // First resource is in the flat block's stmts[0]
+            ExpressionStatement firstResourceStmt = (ExpressionStatement) stmts.get(0);
+            J resourceVar = doVisit(firstResourceStmt.getExpression());
+            Space resourcePrefix = resourceVar.getPrefix();
+            resourceVar = resourceVar.withPrefix(EMPTY);
+
+            boolean hasMoreResources = isDesugaredResourceBlock(nextTryCatch.getTryStatement());
+
+            int nextNonWs = indexOfNextNonWhitespace(cursor, source);
+            boolean semicolonPresent = nextNonWs < source.length() && source.charAt(nextNonWs) == ';';
+            if (semicolonPresent && resourceVar instanceof J.VariableDeclarations) {
+                J.VariableDeclarations vd = (J.VariableDeclarations) resourceVar;
+                resourceVar = vd.getPadding().withVariables(
+                        Space.formatLastSuffix(vd.getPadding().getVariables(), sourceBefore(";")));
+            }
+            J.Try.Resource firstTryResource = new J.Try.Resource(randomId(), resourcePrefix, Markers.EMPTY,
+                    resourceVar.withPrefix(EMPTY), semicolonPresent);
+            skip(";");
+
+            if (hasMoreResources) {
+                resourceList.add(padRight(firstTryResource, EMPTY));
+                // Additional resources use the existing double-wrapped structure
+                org.codehaus.groovy.ast.stmt.Statement current = nextTryCatch.getTryStatement();
+                while (isDesugaredResourceBlock(current)) {
+                    BlockStatement innerBlock = (BlockStatement) ((BlockStatement) current).getStatements().get(0);
+                    ExpressionStatement resourceStmt = (ExpressionStatement) innerBlock.getStatements().get(0);
+                    J rv = doVisit(resourceStmt.getExpression());
+                    Space rp = rv.getPrefix();
+                    rv = rv.withPrefix(EMPTY);
+
+                    TryCatchStatement innerTry = (TryCatchStatement) innerBlock.getStatements().get(innerBlock.getStatements().size() - 1);
+                    boolean hasMore = isDesugaredResourceBlock(innerTry.getTryStatement());
+
+                    int nws = indexOfNextNonWhitespace(cursor, source);
+                    boolean sp = nws < source.length() && source.charAt(nws) == ';';
+                    if (sp && rv instanceof J.VariableDeclarations) {
+                        J.VariableDeclarations vd = (J.VariableDeclarations) rv;
+                        rv = vd.getPadding().withVariables(
+                                Space.formatLastSuffix(vd.getPadding().getVariables(), sourceBefore(";")));
+                    }
+                    J.Try.Resource tr = new J.Try.Resource(randomId(), rp, Markers.EMPTY, rv.withPrefix(EMPTY), sp);
+                    skip(";");
+
+                    if (hasMore) {
+                        resourceList.add(padRight(tr, EMPTY));
+                        current = innerTry.getTryStatement();
+                    } else {
+                        resourceList.add(padRight(tr, sourceBefore(")")));
+                        break;
+                    }
+                }
+            } else {
+                resourceList.add(padRight(firstTryResource, sourceBefore(")")));
+            }
+            JContainer<J.Try.Resource> resources = JContainer.build(beforeParen, resourceList, Markers.EMPTY);
+
+            // Find the body by walking down the desugared chain
+            J.Block body;
+            if (hasMoreResources) {
+                org.codehaus.groovy.ast.stmt.Statement current = nextTryCatch.getTryStatement();
+                TryCatchStatement innerTry = null;
+                while (isDesugaredResourceBlock(current)) {
+                    BlockStatement ib = (BlockStatement) ((BlockStatement) current).getStatements().get(0);
+                    innerTry = (TryCatchStatement) ib.getStatements().get(ib.getStatements().size() - 1);
+                    if (isDesugaredResourceBlock(innerTry.getTryStatement())) {
+                        current = innerTry.getTryStatement();
+                    } else {
+                        break;
+                    }
+                }
+                body = doVisit(innerTry.getTryStatement());
+            } else {
+                body = doVisit(nextTryCatch.getTryStatement());
+            }
+
+            queue.add(new J.Try(randomId(), prefix, Markers.EMPTY, resources, body, emptyList(), null));
         }
 
         @Override
