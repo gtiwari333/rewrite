@@ -414,4 +414,17 @@ class GroovyParserTest implements RewriteTest {
         );
     }
 
+    @Test
+    void bigIntegerInitWithGSuffix() {
+        rewriteRun(
+          groovy(
+            """
+                        void a() {
+                            BigInteger b = 0G
+                        }
+              """
+          )
+        );
+    }
+
 }

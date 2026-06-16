@@ -55,6 +55,7 @@ import org.openrewrite.marker.Markers;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.charset.Charset;
 import java.nio.file.Path;
 import java.util.*;
@@ -2112,6 +2113,10 @@ public class GroovyParserVisitor {
                     // TODO: Proper support for BigDecimal literals
                     jType = JavaType.Primitive.Double;
                     value = ((BigDecimal) value).doubleValue();
+                } else if (type == ClassHelper.BigInteger_TYPE) {
+                    // TODO: Proper support for BigInteger literals (e.g. 0G suffix)
+                    jType = JavaType.Primitive.Long;
+                    value = ((BigInteger) value).longValue();
                 } else if (type == ClassHelper.boolean_TYPE) {
                     jType = JavaType.Primitive.Boolean;
                 } else if (type == ClassHelper.byte_TYPE) {
