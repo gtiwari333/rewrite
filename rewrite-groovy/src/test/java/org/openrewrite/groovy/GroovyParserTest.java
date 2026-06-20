@@ -462,13 +462,27 @@ class GroovyParserTest implements RewriteTest {
     }
 
     @Test
-    void notInstanceOfOperator() {
+    void rangeWithComplexBoundExpression() {
         rewriteRun(
           groovy(
             """
-              if (a !instanceof B) {
-              }
-              """
+            def slice(String s, int n) {
+                s[0..(n - 1)]
+            }
+            """
+          )
+        );
+    }
+
+    @Test
+    void wildcardTypeParameterWithoutExtendsBound() {
+        rewriteRun(
+          groovy(
+            """
+            Map<String, ?> transform(Map<String, ?> input) {
+                return input
+            }
+            """
           )
         );
     }
