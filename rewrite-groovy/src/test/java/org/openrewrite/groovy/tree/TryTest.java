@@ -137,12 +137,57 @@ class TryTest implements RewriteTest {
 
     @Issue("https://github.com/openrewrite/rewrite/issues/1945")
     @Test
-    void tryWithResources() {
+    void tryWithResourcesWithCatch() {
         rewriteRun(
           groovy(
             """
               try(ByteArrayInputStream a = new ByteArrayInputStream("".getBytes()); ByteArrayInputStream b = new ByteArrayInputStream("".getBytes())) {
               } catch (Exception e) {
+              }
+              """
+          )
+        );
+    }
+
+    @Test
+    void tryWithResourcesWithoutCatch() {
+        rewriteRun(
+          groovy(
+            """
+              try(ByteArrayInputStream a = new ByteArrayInputStream("".getBytes()); ByteArrayInputStream b = new ByteArrayInputStream("".getBytes())) {
+              
+              }
+              """
+          )
+        );
+    }
+
+    @Test
+    void tryWithResourcesWithoutCatchNested() {
+        rewriteRun(
+          groovy(
+            """
+              try(ByteArrayInputStream a = new ByteArrayInputStream("".getBytes()); ByteArrayInputStream b = new ByteArrayInputStream("".getBytes())) {
+                            try(ByteArrayInputStream c = new ByteArrayInputStream("".getBytes()); ByteArrayInputStream d = new ByteArrayInputStream("".getBytes())) {
+              
+                             }
+              }
+              """
+          )
+        );
+    }
+
+    @Test
+    void tryWithResourcesWithoutCatchNestedMultiline() {
+        rewriteRun(
+          groovy(
+            """
+              try(ByteArrayInputStream a = new ByteArrayInputStream("".getBytes());
+                  ByteArrayInputStream b = new ByteArrayInputStream("".getBytes())) {
+                            try(ByteArrayInputStream c = new ByteArrayInputStream("".getBytes());
+                                ByteArrayInputStream d = new ByteArrayInputStream("".getBytes())) {
+              
+                             }
               }
               """
           )
